@@ -1,19 +1,11 @@
-from PIL import Image
-import streamlit as st
-
-# Load and display logo
-logo = Image.open("Logo.png")
-st.image(logo, width=200)  # Adjust width as needed
-
-from utils import calculate_audit_days
-
-st.title("ISO 27001 Audit Plan Generator")
-
-company = st.text_input("Company Name", "Skykraft Pty Ltd")
-sites = st.number_input("Number of Sites", min_value=1, value=1)
-employees = st.number_input("Number of Employees", min_value=1, value=50)
-
-if st.button("Generate Audit Time"):
-    days, hours = calculate_audit_days(employees, sites)
-    st.success(f"Recommended Audit Duration: {days} days ({hours} hours)")
-
+1  from PIL import Image
+2  import streamlit as st
+3  
+4  # Load and display logo
+5  logo = Image.open("Logo.png")
+6  st.image(logo, width=200)  # Adjust width as needed
+7  
+8  from utils import calculate_audit_days
+9  
+10 st.title("ISO 27001 Audit Plan Generator")
+11 …
