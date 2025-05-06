@@ -1,9 +1,10 @@
 from PIL import Image
+import streamlit as st
 
 # Load and display logo
 logo = Image.open("Logo.png")
 st.image(logo, width=200)  # Adjust width as needed
-import streamlit as st
+
 from utils import calculate_audit_days
 
 st.title("ISO 27001 Audit Plan Generator")
