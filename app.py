@@ -1,6 +1,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# ISO 27001 Audit-Plan Generator  •  app.py  (v1.1 – 07-May-2025)
-# Now exports a Word document using python-docx.
+# ISO 27001 Audit-Plan Generator • app.py  (v2.0 – 07-May-2025)
+#  • Builds an extensive Word plan: notification page, objectives, doc list,
+#    two-day schedule table, and closing-meeting info.
+#  • No external .docx template required – everything built on the fly.
 # ─────────────────────────────────────────────────────────────────────────────
 
 import math
@@ -8,131 +10,165 @@ from datetime import date, timedelta
 from io import BytesIO
 
 import streamlit as st
+from docx import Document
+from docx.shared import Pt, Inches, Cm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
+
 from utils import calculate_audit_days
 
-# Word generation
-from docx import Document
-from docx.shared import Pt
-
 # ── page config ──────────────────────────────────────────────────────────────
-st.set_page_config(page_title="ISO 27001 Audit Plan Generator", page_icon="🗂️")
-st.title("ISO 27001 Audit Plan Generator")
+st.set_page_config(page_title="ISO 27001 Audit-Plan Generator", page_icon="🗂️", layout="centered")
+st.title("ISO 27001 Audit-Plan Generator")
 
-# ── optional logo ────────────────────────────────────────────────────────────
 try:
     st.image("Logo.png", width=140)
 except FileNotFoundError:
     pass
 
-# ── reference data ───────────────────────────────────────────────────────────
-ISO_STANDARDS = {
-    "ISO 27001:2022": {
-        "audit_types": {
-            "Stage 1": {
-                "factor": 0.40,
-                "purpose": "Documentation review & readiness assessment",
-                "mandatory": ["4.1-4.4", "5.1-5.3", "6.1", "7.1-7.5", "9.1", "10.1"],
-            },
-            "Stage 2": {
-                "factor": 1.00,
-                "purpose": "Full implementation & effectiveness review",
-                "mandatory": ["Clauses 4-10 (full)", "Annex A controls"],
-            },
-            "Surveillance": {
-                "factor": 0.30,
-                "purpose": "Sample verification of the ISMS",
-                "mandatory": ["Sampling per ISO/IEC 17021-1"],
-            },
-            "Recertification": {
-                "factor": 0.60,
-                "purpose": "System re-evaluation at three-year cycle",
-                "mandatory": ["Clauses 4-10 (full)", "Annex A controls"],
-            },
-        }
-    }
+# ── reference data (audit types & factors) ───────────────────────────────────
+ISO_TYPES = {
+    "Stage 1":        0.40,
+    "Stage 2":        1.00,
+    "Surveillance":   0.30,
+    "Recertification":0.60,
 }
+DEFAULT_OBJECTIVES = [
+    "Confirm that the ISMS conforms with ISO/IEC 27001:2022 Clauses 4 to 10.",
+    "Verify that statutory, regulatory and contractual requirements are addressed.",
+    "Evaluate the effectiveness of implemented controls and processes.",
+    "Identify opportunities for improvement.",
+]
 
-# ── 1. client details ────────────────────────────────────────────────────────
-with st.expander("🗂️ Client Details", expanded=True):
-    col1, col2 = st.columns(2)
-    with col1:
-        client_name    = st.text_input("Client name")
-        contact_person = st.text_input("Contact person")
-        contact_email  = st.text_input("Contact e-mail")
-    with col2:
-        address1 = st.text_input("Address line 1")
-        address2 = st.text_input("Address line 2")
-        country  = st.text_input("Country", value="Australia")
+# ── 1. header details ────────────────────────────────────────────────────────
+st.subheader("Client & Audit Basics")
+c1, c2 = st.columns(2)
+with c1:
+    client_name      = st.text_input("Client name", value="Skyline")
+    audit_type       = st.selectbox("Audit type", list(ISO_TYPES.keys()), index=2)
+    scope            = st.text_area("Scope of Certification", height=80,
+                                    value="Provision of XYZ managed services")
+with c2:
+    standard         = st.selectbox("Standard", ["ISO/IEC 27001:2022"])
+    start_dt         = st.date_input("Audit start date", value=date.today())
+    days_span        = st.number_input("Audit duration (calendar days)", 1, 10, value=2)
 
-# ── 2. audit parameters ──────────────────────────────────────────────────────
-with st.expander("⚙️ Audit Parameters", expanded=True):
-    employees = st.number_input("Number of employees (scope)", min_value=1,
-                                value=100, step=1, format="%d")
-    sites = st.number_input("Number of sites / locations", min_value=1,
-                            value=1, step=1, format="%d")
+end_dt = start_dt + timedelta(days=days_span - 1)
 
-# ── 3. schedule options ──────────────────────────────────────────────────────
-with st.expander("🗓️ Schedule Options", expanded=True):
-    standard   = st.selectbox("Standard", list(ISO_STANDARDS.keys()))
-    audit_type = st.selectbox("Audit category",
-                              list(ISO_STANDARDS[standard]["audit_types"].keys()))
-    start_date = st.date_input("Preferred start date", value=date.today())
+# ── 2. audit team & contacts ─────────────────────────────────────────────────
+st.subheader("Audit Team & Contacts")
+lead_auditor = st.text_input("Lead auditor", value="Perla Chandler")
+addl_auditors = st.text_input("Additional auditor(s)", value="Michelle Coleman")
+site_address = st.text_input("Primary site address",
+                             value="123 Cyber St, Brisbane QLD 4000, Australia")
+client_contact = st.text_input("Client main contact", value="Jane Doe – CISO")
 
-# ── 4. calculation & display ─────────────────────────────────────────────────
-if st.button("Calculate Audit Plan", type="primary"):
-    base_days, extra_hours = calculate_audit_days(employees, sites)
-    factor      = ISO_STANDARDS[standard]["audit_types"][audit_type]["factor"]
-    total_days  = round(base_days * factor + (extra_hours / 8) * factor, 2)
-    end_date    = start_date + timedelta(days=math.ceil(total_days) - 1)
+# ── 3. size parameters (to calculate effort) ─────────────────────────────────
+st.subheader("Sizing Parameters")
+colx, coly = st.columns(2)
+with colx:
+    employees = st.number_input("Employees in scope", 1, 50_000, value=100)
+with coly:
+    sites     = st.number_input("Physical locations", 1, 50, value=1)
 
-    st.success("Audit plan generated")
+# ── 4. documentation & objectives (free-text) ───────────────────────────────
+st.subheader("Audit Objectives & Docs Requested")
+objectives = st.text_area("Objectives (one per line)",
+                          value="\n".join(DEFAULT_OBJECTIVES), height=120)
+docs_needed = st.text_area("Documents / records requested (one per line)",
+                           value="Management Review minutes\nInternal audit reports\nRisk Register\nStatement of Applicability",
+                           height=100)
 
-    st.subheader("📋 Audit Effort Estimate")
-    st.write(f"**Client:** {client_name or '—'}   |   **Contact:** {contact_person or '—'} "
-             f"({contact_email or 'n/a'})")
-    st.write(f"**Address:** {address1} {address2} {country}")
-    st.write(f"**Audit type:** {audit_type} – "
-             f"{ISO_STANDARDS[standard]['audit_types'][audit_type]['purpose']}")
-    st.write(f"**Total effort:** **{total_days} day(s)** "
-             f"({base_days} day(s) + {extra_hours} h) × factor {factor}")
-    st.write(f"**Schedule:** {start_date.strftime('%d %b %Y')} → "
-             f"{end_date.strftime('%d %b %Y')}")
-    mandatory_list = ISO_STANDARDS[standard]["audit_types"][audit_type]["mandatory"]
-    st.write(f"**Mandatory coverage:** {', '.join(mandatory_list)}")
+# ── 5. generate & download ───────────────────────────────────────────────────
+if st.button("Create Word Audit-Plan", type="primary"):
+    # 5.1  effort maths (same simple rule as before)
+    base_days, extra_h = calculate_audit_days(employees, sites)
+    factor      = ISO_TYPES[audit_type]
+    total_days  = round(base_days * factor + (extra_h / 8) * factor, 2)
 
-    # ── 4.1  Word doc creation ───────────────────────────────────────────────
+    # 5.2  build Word doc -----------------------------------------------------
     doc = Document()
-    style = doc.styles['Normal']
-    style.font.name = 'Calibri'
-    style.font.size = Pt(11)
+    normal = doc.styles["Normal"].font
+    normal.name, normal.size = "Calibri", Pt(11)
 
-    doc.add_heading('ISO 27001 Audit Plan', level=1)
+    # heading
+    h = doc.add_heading("ISO 27001 Audit Notification & Plan", level=1)
+    h.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    doc.add_heading('Client Details', level=2)
-    doc.add_paragraph(f"Client: {client_name}")
-    doc.add_paragraph(f"Contact: {contact_person}  |  {contact_email}")
-    doc.add_paragraph(f"Address: {address1} {address2} {country}")
+    # key table --------------------------------------------------------------
+    tbl = doc.add_table(rows=0, cols=2)
+    tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+    tbl.autofit = True
 
-    doc.add_heading('Audit Parameters', level=2)
-    doc.add_paragraph(f"Employees in scope: {employees}")
-    doc.add_paragraph(f"Physical locations: {sites}")
+    def add_row(label, value):
+        row = tbl.add_row()
+        row.cells[0].text, row.cells[1].text = label, value
+        for cell in row.cells:
+            cell.vertical_alignment = WD_ALIGN_VERTICAL.TOP
+            cell.paragraphs[0].runs[0].font.bold = True if cell is row.cells[0] else False
 
-    doc.add_heading('Schedule', level=2)
-    doc.add_paragraph(f"Audit category: {audit_type}")
-    doc.add_paragraph(f"Start date: {start_date.strftime('%d %b %Y')}")
-    doc.add_paragraph(f"End date: {end_date.strftime('%d %b %Y')}")
-    doc.add_paragraph(f"Total effort: {total_days} day(s)")
+    add_row("Company Name",            client_name)
+    add_row("Audit Type",              f"{audit_type} Audit")
+    add_row("Audit Criteria",          standard)
+    add_row("Scope of Certification",  scope)
+    add_row("Site Address",            site_address)
+    add_row("Audit Dates",             f"{start_dt.strftime('%d %b %Y')} – {end_dt.strftime('%d %b %Y')}")
+    add_row("Audit Team",              f"{lead_auditor} (Lead)\n{addl_auditors}")
+    doc.add_paragraph()
 
-    doc.add_heading('Mandatory Clauses / Controls', level=2)
-    for item in mandatory_list:
-        doc.add_paragraph(f"• {item}", style='List Bullet')
+    # objectives -------------------------------------------------------------
+    doc.add_heading("1  Audit Objectives", level=2)
+    for line in objectives.splitlines():
+        if line.strip():
+            doc.add_paragraph(line.strip(), style="List Bullet")
 
-    # prepare binary stream
+    # documents requested ----------------------------------------------------
+    doc.add_heading("2  Documentation Requested", level=2)
+    for line in docs_needed.splitlines():
+        if line.strip():
+            doc.add_paragraph(line.strip(), style="List Bullet")
+
+    # schedule (simple two-day example) --------------------------------------
+    doc.add_heading("3  Audit Schedule (Draft)", level=2)
+    sched = doc.add_table(rows=1, cols=5)
+    sched.style = "Table Grid"
+    hdr = sched.rows[0].cells
+    for i, txt in enumerate(["Date", "Time", "Auditor", "Activity", "Attendees"]):
+        hdr[i].text = txt
+        hdr[i].paragraphs[0].runs[0].font.bold = True
+
+    # --- build automatic skeleton for each calendar day ---------------------
+    day_times = [("09:00–12:00", "Opening & Context review"),
+                 ("13:00–16:30", "Controls verification & evidence collection")]
+    for d in range(days_span):
+        current = (start_dt + timedelta(days=d)).strftime("%d %b %Y")
+        for slot, activity in day_times:
+            r = sched.add_row().cells
+            r[0].text, r[1].text = current, slot
+            r[2].text = lead_auditor if d == 0 else addl_auditors or lead_auditor
+            r[3].text = activity
+            r[4].text = client_contact
+
+    doc.add_paragraph()
+    doc.add_heading("4  Closing Meeting & Reporting", level=2)
+    doc.add_paragraph(
+        "The closing meeting will be held on the final day at 16:30 AEST. "
+        "Audit findings, non-conformances and timelines for corrective action will be discussed. "
+        "The audit report will be issued within 7 working days."
+    )
+
+    # 5.3  stream to browser --------------------------------------------------
     buffer = BytesIO()
     doc.save(buffer)
     buffer.seek(0)
+    fname = f"Audit-Plan-{client_name.replace(' ', '_')}.docx"
 
-    st.download_button("Download Word Audit Plan (.docx)",
+    st.download_button("⬇️  Download Word Audit-Plan",
                        data=buffer,
-                       file_name=f"Audit-Plan-{client_name or 'Client'}.docx",
+                       file_name=fname,
                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+    # 5.4  onscreen summary ---------------------------------------------------
+    st.success(f"Complete Word audit-plan for **{client_name}** generated. "
+               "Click the button above to download.")
+
