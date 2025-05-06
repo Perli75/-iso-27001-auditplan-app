@@ -1,18 +1,19 @@
-import pandas as pd
+# utils.py
 
-def calculate_audit_hours(employee_count, site_count, audit_type='Stage 2'):
-    base_hours = {
-        'Stage 1': 8,
-        'Stage 2': 12,
-        'Surveillance': 6
-    }
-    hours = base_hours.get(audit_type, 12)
-    if employee_count > 100:
-        hours += 4
-    if site_count > 1:
-        hours += (site_count - 1) * 2
+def calculate_audit_time(employees: int, sites: int) -> float:
+    """
+    (Example implementation – replace with your real ISO27006 logic)
+    Returns total audit hours based on number of employees and number of sites.
+    """
+    base_rate_per_100_emp = 8.0  # e.g. 8 hours per 100 employees
+    hours = (employees / 100) * base_rate_per_100_emp + sites * 4.0
     return hours
 
-def generate_summary(employee_count, site_count, audit_type):
-    hours = calculate_audit_hours(employee_count, site_count, audit_type)
-    return f"{audit_type} audit planned for {employee_count} employees across {site_count} site(s). Estimated audit duration: {hours} hours."
+def calculate_audit_days(employees: int, sites: int) -> tuple[int, float]:
+    """
+    Returns (days, remaining_hours) by dividing total hours into 8-hour days.
+    """
+    total_hours = calculate_audit_time(employees, sites)
+    days = max(1, int(total_hours // 8))
+    rem = total_hours - (days * 8)
+    return days, rem
